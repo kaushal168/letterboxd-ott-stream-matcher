@@ -3,139 +3,9 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { MovieItem } from "@/types";
-
-const normalizeProvider = (name: string): string => {
-  const lower = name.toLowerCase().trim();
-  if (lower.includes("prime video")) return "Amazon Prime Video";
-  if (lower.includes("lionsgate")) return "Lionsgate Play";
-  if (lower.includes("mubi")) return "MUBI";
-  if (lower.includes("crunchyroll")) return "Crunchyroll";
-  if (lower.includes("sony pictures") || lower.includes("sonypictures") || lower.includes("sony liv")) return "Sony LIV";
-  if (lower.includes("apple tv")) return "Apple TV";
-  if (lower.includes("hotstar") || lower.includes("jio")) return "JioHotstar";
-  return name;
-};
-
-const LANGUAGE_MAP: Record<string, string> = {
-  en: "English", hi: "Hindi", te: "Telugu", ta: "Tamil", ml: "Malayalam", 
-  kn: "Kannada", mr: "Marathi", gu: "Gujarati", bn: "Bengali", pa: "Punjabi",
-  ja: "Japanese", ko: "Korean", zh: "Chinese", ca: "Cantonese", cn: "Cantonese",
-  fr: "French", es: "Spanish", it: "Italian", de: "German", ru: "Russian",
-  pt: "Portuguese", ar: "Arabic", fa: "Farsi", ur: "Urdu", th: "Thai",
-  id: "Indonesian", tr: "Turkish", nl: "Dutch", sv: "Swedish", no: "Norwegian",
-  da: "Danish", fi: "Finnish", pl: "Polish", hu: "Hungarian", cs: "Czech",
-  ro: "Romanian", uk: "Ukrainian", vi: "Vietnamese", tl: "Tagalog"
-};
-
-const getLanguageName = (code: string) => {
-  return LANGUAGE_MAP[code.toLowerCase()] || code.toUpperCase();
-};
-
-function SpotlightCard({ movie, isDarkMode }: { movie: MovieItem, isDarkMode: boolean }) {
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [isHovered, setIsHovered] = useState(false);
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    setPosition({ x: e.clientX - rect.left, y: e.clientY - rect.top });
-  };
-
-  // Deduplicate logos for cached movies that might have overlapping channel variants
-  const uniqueProviders = (movie.providers?.flatrate || []).filter((v, i, a) => 
-    a.findIndex(t => normalizeProvider(t.name) === normalizeProvider(v.name)) === i
-  );
-
-  return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, scale: 0.9 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
-      transition={{ duration: 0.3 }}
-      onMouseMove={handleMouseMove}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      className="group rounded-lg overflow-hidden border flex flex-col h-full relative transition-shadow duration-300 bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 hover:border-blue-400 dark:hover:border-gray-500 shadow-sm dark:shadow-none hover:shadow-md dark:hover:shadow-none"
-    >
-      <div
-        className="pointer-events-none absolute inset-0 z-20 transition-opacity duration-300 rounded-lg"
-        style={{
-          opacity: isHovered ? 1 : 0,
-          background: `radial-gradient(600px at ${position.x}px ${position.y}px, ${isDarkMode ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.06)'}, transparent 40%)`,
-        }}
-      />
-
-      <div className="aspect-[2/3] bg-gray-100 dark:bg-gray-800 relative overflow-hidden border-b border-gray-200 dark:border-gray-800 shrink-0">
-        {movie.language && movie.language !== "en" && (
-          <div className="absolute top-2 right-2 z-30 bg-slate-900/80 backdrop-blur-sm text-white text-[10px] font-bold px-1.5 py-0.5 rounded tracking-wider shadow-sm">
-            {getLanguageName(movie.language)}
-          </div>
-        )}
-
-        {movie.posterUrl ? (
-          <img
-            src={movie.posterUrl}
-            alt={movie.title}
-            className="object-cover w-full h-full transition-transform duration-500 group-hover:scale-105"
-            loading="lazy"
-          />
-        ) : (
-          <div className="flex items-center justify-center w-full h-full text-slate-400 dark:text-gray-500 text-xs text-center p-2">
-            No Poster
-          </div>
-        )}
-
-        <div className="absolute inset-0 bg-gradient-to-t from-gray-900/90 dark:from-gray-950 via-gray-900/60 dark:via-gray-950/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4 z-10">
-          {movie.rating ? (
-            <div className="flex items-center gap-1.5 text-yellow-400 font-semibold text-sm mb-2 drop-shadow-md">
-              <span>★</span>
-              <span>{movie.rating.toFixed(1)}</span>
-            </div>
-          ) : null}
-        </div>
-      </div>
-      
-      <div className="p-3 flex flex-col flex-grow relative z-10 bg-white dark:bg-gray-900">
-        <h2 className="font-bold text-sm line-clamp-2 mb-1 text-slate-900 dark:text-gray-100">
-          {movie.title}
-          {movie.year && (
-            <span className="text-slate-500 dark:text-gray-500 font-normal ml-1">
-              ({movie.year})
-            </span>
-          )}
-        </h2>
-        
-        {movie.genres && movie.genres.length > 0 && (
-          <div className="flex flex-wrap gap-1 mb-2 mt-1">
-            {movie.genres.slice(0, 2).map((genre) => (
-              <span key={genre} className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded-sm bg-slate-100 dark:bg-gray-800 text-slate-500 dark:text-gray-400 border border-slate-200 dark:border-gray-700">
-                {genre}
-              </span>
-            ))}
-          </div>
-        )}
-        
-        <div className="mt-auto pt-2 border-t border-slate-100 dark:border-gray-800/60">
-          {uniqueProviders.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5 pt-1">
-              {uniqueProviders.map((p: any) => (
-                <img
-                  key={p.id}
-                  src={p.logoUrl}
-                  alt={normalizeProvider(p.name)}
-                  title={normalizeProvider(p.name)}
-                  className="w-6 h-6 rounded-md object-cover shadow-sm bg-white"
-                />
-              ))}
-            </div>
-          ) : (
-            <p className="text-xs text-slate-400 dark:text-gray-500 italic pt-1">Not streaming in India</p>
-          )}
-        </div>
-      </div>
-    </motion.div>
-  );
-}
+import SpotlightCard from "@/components/SpotlightCard";
+import { normalizeProvider, getLanguageName } from "@/lib/utils";
+import { REGIONS } from "@/lib/constants";
 
 export default function Home() {
   const [movies, setMovies] = useState<MovieItem[]>([]);
@@ -150,6 +20,9 @@ export default function Home() {
   const [sortBy, setSortBy] = useState("default");
   const [selectedGenre, setSelectedGenre] = useState("all");
   const [selectedLanguage, setSelectedLanguage] = useState("all");
+
+  const [selectedRegion, setSelectedRegion] = useState("IN");
+  const [activeRegion, setActiveRegion] = useState("IN");
   
   const [isFilterExpanded, setIsFilterExpanded] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
@@ -217,15 +90,19 @@ export default function Home() {
     broadcastStatus("START_LOADING");
 
     try {
-      const res = await fetch(`/api/search?query=${encodeURIComponent(searchQuery)}`);
+      const res = await fetch(`/api/search?query=${encodeURIComponent(searchQuery)}&region=${selectedRegion}`);
       if (!res.ok) {
         if (res.status === 429) throw new Error("Rate limit reached. Try again in a minute.");
         const data = await res.json();
         throw new Error(data.error || "Search failed");
       }
       const data = await res.json();
-      if (data.movies.length === 0) setError("Movie not found.");
-      else setMovies(data.movies);
+      if (data.movies.length === 0) {
+        setError("Movie not found.");
+      } else {
+        setActiveRegion(selectedRegion); // <-- Sync UI only on success
+        setMovies(data.movies);
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -264,6 +141,8 @@ export default function Home() {
   };
 
   const handleFetch = async (urlToScrape: string) => {
+    const fetchRegion = selectedRegion;
+
     setIsLoading(true);
     setError("");
     setMovies([]);
@@ -287,7 +166,7 @@ export default function Home() {
         const res = await fetch("/api/scrape", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: urlToScrape, page: currentPage, sessionCookie: currentCookie }),
+          body: JSON.stringify({ url: urlToScrape, page: currentPage, sessionCookie: currentCookie, region: fetchRegion }),
         });
 
         if (!res.ok) {
@@ -305,6 +184,7 @@ export default function Home() {
         if (data.movies.length === 0 && currentPage === 1) {
           throw new Error("No films found on this list. Make sure the profile/list is public.");
         }
+        if (currentPage === 1) setActiveRegion(fetchRegion);
         
         accumulatedMovies = [...accumulatedMovies, ...data.movies];
         setMovies([...accumulatedMovies]);
@@ -411,7 +291,7 @@ export default function Home() {
                   CineFind
                 </h1>
                 <p className="text-xs mt-0.5 text-slate-500 dark:text-gray-400">
-                  Instant OTT availability in India for your Letterboxd lists, watchlist, and searches.
+                  Instant OTT availability for your Letterboxd lists, watchlist, and searches.
                 </p>
               </div>
             </div>
@@ -460,6 +340,18 @@ export default function Home() {
               </button>
             </form>
 
+            <select
+              value={selectedRegion}
+              onChange={(e) => setSelectedRegion(e.target.value)}
+              className="hidden sm:block border px-2 py-2.5 rounded-md text-sm transition-colors cursor-pointer outline-none bg-white dark:bg-gray-800/80 border-gray-300 dark:border-gray-700 text-slate-900 dark:text-white shadow-sm dark:shadow-none ml-2"
+            >
+              {REGIONS.map((r) => (
+                <option key={r.code} value={r.code}>
+                  {r.label}{"\u00A0\u00A0"}{r.emoji}
+                </option>
+              ))}
+            </select>
+
             <button 
               onClick={() => setIsDarkMode(!isDarkMode)} 
               className="hidden lg:flex p-2.5 rounded-full transition-colors ml-2 bg-slate-200 dark:bg-gray-800 hover:bg-slate-300 dark:hover:bg-gray-700 text-slate-800 dark:text-yellow-400"
@@ -490,7 +382,7 @@ export default function Home() {
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <h3 className="text-xs font-semibold text-blue-600 dark:text-blue-500 uppercase tracking-wider">
-                        Available On (India)
+                        Available On ({REGIONS.find(r => r.code === activeRegion)?.label || activeRegion})
                       </h3>
                       <button
                         type="button"
@@ -648,7 +540,12 @@ export default function Home() {
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-6 pb-12">
               <AnimatePresence>
                 {filteredMovies.map((movie, idx) => (
-                  <SpotlightCard key={`${movie.tmdbId}-${idx}`} movie={movie} isDarkMode={isDarkMode} />
+                  <SpotlightCard 
+                    key={`${movie.tmdbId}-${idx}`} 
+                    movie={movie} 
+                    isDarkMode={isDarkMode}
+                    activeRegionLabel={REGIONS.find(r => r.code === activeRegion)?.label || activeRegion}
+                  />
                 ))}
               </AnimatePresence>
             </div>

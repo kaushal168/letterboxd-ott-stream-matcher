@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { DEFAULT_REGION, TMDB_IMAGE_BASE_URL, CACHE_TTL_MS } from "@/lib/constants";
 import { MovieItem } from "@/types";
+import { normalizeProvider } from "@/lib/utils";
 
 const TMDB_API_KEY = process.env.TMDB_API_KEY;
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
@@ -27,30 +28,6 @@ interface RegionWatchProviders {
   buy?: RawProvider[];
 }
 
-/**
- * Consolidates fragmented TMDB provider identities in India (like Ads or Amazon Channels)
- * into their canonical master names for a cleaner UI filter bar.
- */
-export function normalizeProviderName(name: string): string {
-  const lower = name.toLowerCase().trim();
-
-  if (lower.includes("prime video")) return "Amazon Prime Video";
-
-  if (lower.includes("lionsgate")) return "Lionsgate Play";
-  if (lower.includes("mubi")) return "MUBI";
-  if (lower.includes("crunchyroll")) return "Crunchyroll";
-  if (lower.includes("sony pictures") || lower.includes("sonypictures")) return "Sony LIV";
-  if (lower.includes("apple tv")) return "Apple TV";
-  
-  if (lower.includes("hotstar") || lower.includes("jio")) return "JioHotstar";
-
-  return name;
-}
-
-/**
- * Transforms raw TMDB provider object into a formatted list,
- * actively de-duplicating channels resolved by `normalizeProviderName`.
- */
 function formatProviders(rawList?: RawProvider[]) {
   if (!rawList || !Array.isArray(rawList)) return [];
   
@@ -58,7 +35,7 @@ function formatProviders(rawList?: RawProvider[]) {
   const normalized: Array<{ id: number; name: string; logoUrl: string }> = [];
 
   for (const p of rawList) {
-    const canonicalName = normalizeProviderName(p.provider_name);
+    const canonicalName = normalizeProvider(p.provider_name);
     if (!seen.has(canonicalName)) {
       seen.add(canonicalName);
       normalized.push({
@@ -93,11 +70,6 @@ async function fetchWithRetry(url: string, retries = 3): Promise<Response> {
   throw new Error(`Fetch failed after retries: ${url}`);
 }
 
-/**
- * Searches TMDB for a movie or TV show.
- * Combines Movie and TV results BEFORE finding the best match to prevent 
- * loose movie matches from overriding exact TV matches.
- */
 async function searchTmdb(title: string, targetYear?: number) {
   const findBestMatch = (results: any[], type?: 'movie' | 'tv') => {
     const valid = results.filter(r => (type ? r.media_type === type : (r.media_type === 'movie' || r.media_type === 'tv')));
@@ -110,7 +82,6 @@ async function searchTmdb(title: string, targetYear?: number) {
       return exactTitle || valid[0];
     }
 
-    // 1. STRICT MATCH: Exact Title AND Exact/Close Year (+/- 1)
     const exactTitleMatch = valid.find(r => {
       const t = (r.title || r.name || '').toLowerCase();
       if (t !== searchTitle) return false;
@@ -121,21 +92,18 @@ async function searchTmdb(title: string, targetYear?: number) {
     });
     if (exactTitleMatch) return exactTitleMatch;
 
-    // 2. LOOSE MATCH: Exact Year (Title might be slightly different in TMDB)
     const exactYear = valid.find(r => {
       const yStr = r.media_type === 'tv' || r.first_air_date ? r.first_air_date : r.release_date;
       return yStr && parseInt(yStr.split("-")[0], 10) === targetYear;
     });
     if (exactYear) return exactYear;
 
-    // 3. LOOSE MATCH: Close Year (+/- 1)
     const closeYear = valid.find(r => {
       const yStr = r.media_type === 'tv' || r.first_air_date ? r.first_air_date : r.release_date;
       return yStr && Math.abs(parseInt(yStr.split("-")[0], 10) - targetYear) <= 1;
     });
     if (closeYear) return closeYear;
 
-    // 4. Fallback to the top popularity result
     return valid[0];
   };
 
@@ -144,7 +112,6 @@ async function searchTmdb(title: string, targetYear?: number) {
   if (targetYear) {
     let combinedResults: any[] = [];
 
-    // Fetch movies
     const movieRes = await fetchWithRetry(`${TMDB_BASE_URL}/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(title)}&year=${targetYear}`);
     const movieData = await movieRes.json();
     if (movieData.results?.length > 0) {
@@ -152,7 +119,6 @@ async function searchTmdb(title: string, targetYear?: number) {
       combinedResults = [...combinedResults, ...movieData.results];
     }
 
-    // Fetch TV shows
     const tvRes = await fetchWithRetry(`${TMDB_BASE_URL}/search/tv?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(title)}&first_air_date_year=${targetYear}`);
     const tvData = await tvRes.json();
     if (tvData.results?.length > 0) {
@@ -160,7 +126,6 @@ async function searchTmdb(title: string, targetYear?: number) {
       combinedResults = [...combinedResults, ...tvData.results];
     }
 
-    // Sort by popularity so the best strict match wins
     combinedResults.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
 
     if (combinedResults.length > 0) {
@@ -198,10 +163,6 @@ async function searchTmdb(title: string, targetYear?: number) {
   return null;
 }
 
-/**
- * Fetches watch provider data. 
- * Positive IDs query /movie, Negative IDs query /tv endpoints.
- */
 async function fetchTmdbProviders(tmdbId: number, region: string = DEFAULT_REGION) {
   const mediaType = tmdbId < 0 ? 'tv' : 'movie';
   const actualId = Math.abs(tmdbId);
@@ -231,10 +192,6 @@ function chunkArray<T>(array: T[], size: number): T[][] {
   return chunked;
 }
 
-/**
- * Resolves a single movie: checks Turso cache first, fetches missing/stale data from TMDB,
- * and updates Turso.
- */
 export async function getOrFetchMovie(
   title: string,
   year?: number,
@@ -271,7 +228,7 @@ export async function getOrFetchMovie(
     const rating = row.rating ? Number(row.rating) : 0;
     const popularity = row.popularity ? Number(row.popularity) : 0;
     
-    // Safely parse new database columns
+    // Parse language and genres
     const language = row.language ? String(row.language) : undefined;
     let genres: string[] = [];
     if (row.genres) {
@@ -314,6 +271,8 @@ export async function getOrFetchMovie(
       posterUrl,
       rating,
       popularity,
+      language,
+      genres,
       providers: freshProviders,
     };
   }
@@ -366,10 +325,6 @@ export async function getOrFetchMovie(
   };
 }
 
-/**
- * Resolves a batch of scraped movies using parallel chunking.
- * Processes 10 movies concurrently to drastically speed up TMDB fetches.
- */
 export async function getOrFetchMovieBatch(
   movies: Array<{ title: string; year?: number }>,
   region: string = DEFAULT_REGION

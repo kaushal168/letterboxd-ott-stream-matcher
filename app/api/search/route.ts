@@ -6,6 +6,7 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const query = searchParams.get("query");
+    const region = searchParams.get("region") || DEFAULT_REGION;
 
     if (!query) {
       return NextResponse.json({ error: "Missing search query" }, { status: 400 });
@@ -16,7 +17,7 @@ export async function GET(request: Request) {
     
     const title = yearMatch ? query.replace(/\b(19|20)\d{2}\b/, "").trim() : query.trim();
 
-    const movie = await getOrFetchMovie(title, year, DEFAULT_REGION);
+    const movie = await getOrFetchMovie(title, year, region);
 
     if (!movie) {
       return NextResponse.json({ movies: [] });

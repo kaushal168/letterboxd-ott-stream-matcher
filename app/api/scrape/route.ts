@@ -28,7 +28,7 @@ function normalizeLetterboxdUrl(input: string): string {
 
 export async function POST(request: Request) {
   try {
-    const { url, page = 1, sessionCookie = "" } = await request.json();
+    const { url, page = 1, sessionCookie = "", region = DEFAULT_REGION } = await request.json();
 
     if (!url || typeof url !== "string") {
       return NextResponse.json({ error: "Please enter a valid Letterboxd username or URL" }, { status: 400 });
@@ -156,7 +156,7 @@ export async function POST(request: Request) {
       $(".paginate-nextprev a:contains('Older')").length > 0 ||
       $(".pagination .next").length > 0;
 
-    const enrichedMovies = await getOrFetchMovieBatch(movies, DEFAULT_REGION);
+    const enrichedMovies = await getOrFetchMovieBatch(movies, region);
 
     return NextResponse.json({ 
       movies: enrichedMovies, 
